@@ -1,0 +1,112 @@
+PRAGMA foreign_keys = OFF;
+
+-- Шаг 1: Создание временной таблицы
+CREATE TABLE Events_Temp (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    CreatedDate TEXT,
+    UpdatedDate TEXT,
+    EventDate TEXT,
+    EventTime TEXT,
+    EventLocationName TEXT,
+    EventLocationAdress TEXT,
+    EventLocationUrl TEXT,
+    EventName TEXT,
+    EventNameUrl TEXT,
+    Category TEXT,
+    Tags TEXT,
+    Price TEXT,
+    EventCity TEXT
+);
+
+-- Шаг 2: Копирование данных во временную таблицу
+INSERT INTO Events_Temp (
+    Id,
+    CreatedDate,
+    UpdatedDate,
+    EventDate,
+    EventTime,
+    EventLocationName,
+    EventLocationAdress,
+    EventLocationUrl,
+    EventName,
+    EventNameUrl,
+    Category,
+    Tags,
+    Price,
+    EventCity
+)
+SELECT
+    Id,
+    CreatedDate,
+    UpdatedDate,
+    EventDate,
+    EventTime,
+    EventLocationName,
+    EventLocationAdress,
+    EventLocationUrl,
+    EventName,
+    EventNameUrl,
+    Category,
+    Tags,
+    Price,
+    EventCity
+FROM Events;
+
+-- Шаг 3: Удаление основной таблицы
+DROP TABLE Events;
+
+-- Шаг 4: Создание новой таблицы с нужным порядком столбцов
+CREATE TABLE Events (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    CreatedDate TEXT,
+    UpdatedDate TEXT,
+    EventCity TEXT,  -- Новый порядок: EventCity перенесен выше
+    EventDate TEXT,
+    EventTime TEXT,
+    EventDateTime TEXT,
+    EventLocationName TEXT,
+    EventLocationAdress TEXT,
+    EventLocationUrl TEXT,
+    EventName TEXT,
+    EventNameUrl TEXT,
+    Category TEXT,
+    Tags TEXT,
+    Price TEXT
+);
+
+-- Шаг 5: Копирование данных из временной таблицы в новую
+INSERT INTO Events (
+    Id,
+    CreatedDate,
+    UpdatedDate,
+    EventCity,  -- Новый порядок
+    EventDate,
+    EventTime,
+    EventLocationName,
+    EventLocationAdress,
+    EventLocationUrl,
+    EventName,
+    EventNameUrl,
+    Category,
+    Tags,
+    Price
+)
+SELECT
+    Id,
+    CreatedDate,
+    UpdatedDate,
+    EventCity,  -- Новый порядок
+    EventDate,
+    EventTime,
+    EventLocationName,
+    EventLocationAdress,
+    EventLocationUrl,
+    EventName,
+    EventNameUrl,
+    Category,
+    Tags,
+    Price
+FROM Events_Temp;
+
+-- Шаг 6: Удаление временной таблицы
+DROP TABLE Events_Temp;
