@@ -7,9 +7,7 @@ from telebot import types
 from config import BOT_TOKEN
 from telebot import apihelper
 from telebot.apihelper import ApiTelegramException
-from urllib3.exceptions import ProtocolError, ReadTimeoutError, MaxRetryError
-from requests.exceptions import RequestException
-
+from urllib3.exceptions import ProtocolError, ReadTimeoutError
 from handlers.start_handler import setup_start_handler
 from handlers.weather_handler import setup_weather_handler
 from handlers.afisha_handler import setup_afisha_handler
@@ -23,79 +21,78 @@ from handlers.filters_handler import setup_filter_handler, setup_filter_category
 from handlers.show_events_handler import show_next_events_handler
 from handlers.errors_handler import handle_network_errors
 
-# Константы для управления повторами
-MAX_RETRIES = 3
-BASE_DELAY = 5
-MAX_DELAY = 30  # 1 минута максимального ожидания
 
-# Настройки соединения (оптимизированные)
-apihelper.ENABLE_MIDDLEWARE = True
-apihelper.SESSION_TIME_TO_LIVE = 5 * 60
+# Настройки соединения
+apihelper.ENABLE_MIDDLEWARE = True  # Включаем middleware
+apihelper.SESSION_TIME_TO_LIVE = 5 * 60  # 5 минут
 apihelper.READ_TIMEOUT = 30
 apihelper.CONNECT_TIMEOUT = 15
-apihelper.MAX_RETRIES = 2
 
+# Колбэк для автоматического переподключения
+def retry_after_failure(exception):
+    logger.warning(f"Connection error: {exception}")
+    time.sleep(5)
+    return True
 
-# Улучшенное логирование
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("bot.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-telebot.logger.setLevel(logging.WARNING)  # Уменьшаем логи telebot
+bot = telebot.TeleBot(BOT_TOKEN, exception_handler=retry_after_failure)
 
-
-# Локальное хранилище
-thread_local = threading.local()
-bot = telebot.TeleBot(BOT_TOKEN)
 
 # Сохраняем оригинальный метод
 original_make_request = apihelper._make_request
 
-def patched_make_request(*args, **kwargs):
-    """Модифицированный метод с обработкой ошибок"""
-    for attempt in range(MAX_RETRIES):
+def safe_make_request(*args, **kwargs):
+    """Безопасный wrapper для запросов с обработкой ошибок"""
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
             return original_make_request(*args, **kwargs)
         except ApiTelegramException as e:
             if e.error_code == 429:
-                retry_after = e.result.get('parameters', {}).get('retry_after', BASE_DELAY)
-                logger.warning(f"Rate limited. Waiting {retry_after}s")
+                retry_after = e.result.get('parameters', {}).get('retry_after', 5)
+                logger.warning(f"Rate limited. Waiting {retry_after}s (attempt {attempt+1}/{max_retries})")
                 time.sleep(retry_after)
                 continue
-            raise
-        except (ConnectionError, ProtocolError, ReadTimeoutError) as e:
-            logger.warning(f"Network error: {e}. Retry {attempt + 1}/{MAX_RETRIES}")
-            time.sleep(BASE_DELAY * (attempt + 1))
+            logger.error(f"Telegram API error: {e}")
+            break
+        except Exception as e:
+            logger.error(f"Request failed: {e}")
+            time.sleep(2 ** attempt)  # Экспоненциальная задержка
             continue
-    raise Exception(f"Failed after {MAX_RETRIES} attempts")
+    return None
 
-# Применяем патч
-apihelper._make_request = patched_make_request
+# Патчим метод
+apihelper._make_request = safe_make_request
 
-# Улучшенный middleware
+# # Настройка логирования
+# logging.basicConfig(
+#     level=getattr(logging, config.LOG_LEVEL),
+#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+#     handlers=[
+#         logging.FileHandler("bot_debug.log"),  # Логи в файл
+#         logging.StreamHandler()               # Логи в консоль
+#     ]
+# )
+
+logger = logging.getLogger(__name__)
+
+# Включаем режим отладки
+apihelper.DEBUG = True
+
+# Локальное хранилище для chat_id текущего пользователя
+thread_local = threading.local()
+
+# Middleware для сохранения chat_id
 @bot.middleware_handler(update_types=["message"])
+@handle_network_errors
 def save_chat_id(bot_instance, message):
     try:
         thread_local.chat_id = message.chat.id
+        logger.info(f"Chat ID сохранен: {message.chat.id}")
     except Exception as e:
-        logger.error(f"Middleware error: {e}")
-
-# Уведомление пользователя об ошибках
-def notify_user(message):
-    if hasattr(thread_local, 'chat_id'):
-        try:
-            bot.send_message(thread_local.chat_id, message)
-        except Exception as e:
-            logger.error(f"Failed to notify user: {e}")
-
-
-# Регистрация обработчиков (без изменений)
-def setup_handlers():
+        logger.error(f"Ошибка в middleware: {e}")
+        
+# Регистрация обработчиков
+def setup_handlers():    
     setup_start_handler(bot)
     setup_weather_handler(bot)
     setup_ai_tools_handler(bot)
@@ -114,20 +111,27 @@ def setup_handlers():
     show_next_events_handler(bot)
     setup_preference_handler(bot)
 
-# Основной цикл бота
+
+
 def run_bot():
     while True:
         try:
             logger.info("Starting bot...")
-            bot.polling(
-                non_stop=True,
-                interval=2,
-                timeout=10,
-            )
+            setup_handlers()
+            bot.infinity_polling(none_stop=True, interval=2, timeout=5)
         except Exception as e:
-            logger.critical(f"Bot crashed: {e}", exc_info=True)
-            notify_user("🔧 Произошла ошибка. Перезапускаюсь...")
-            time.sleep(BASE_DELAY)
+            logger.error(f"Critical error: {e}")
+            logger.critical(f"CRASH: {str(e)}", exc_info=True)
+            logger.info("Restarting in 5 seconds...")
+
+            if hasattr(thread_local, "chat_id"):
+                try:
+                    bot.send_message(thread_local.chat_id, "Дружище, подожди, не торопись, дай мне 5 секунд подумать")
+                except Exception as send_error:
+                    logger.error(f"Ошибка при отправке сообщения пользователю: {send_error}")
+
+            time.sleep(5)
+            continue
 
 if __name__ == "__main__":
     # Настройка соединения
@@ -141,3 +145,4 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.critical(f"Fatal startup error: {e}")
+

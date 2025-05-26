@@ -1,7 +1,6 @@
 import telebot
 from telebot import types
 from datetime import datetime
-from config import DEFAULT_ROLE
 from db.operations.db_users import db_update_users
 from handlers.errors_handler import handle_network_errors
 
@@ -10,7 +9,7 @@ def setup_start_handler(bot):
     @handle_network_errors
     def start(message):
         global system
-        system = DEFAULT_ROLE
+
         
          # Получаем данные пользователя
         user_data = {
@@ -27,8 +26,8 @@ def setup_start_handler(bot):
         markup = types.InlineKeyboardMarkup()
         btn1 = types.InlineKeyboardButton ('Афиша', callback_data = 'parser')
         btn2 = types.InlineKeyboardButton ('Погода', callback_data = 'weather')
-        btn3 = types.InlineKeyboardButton ('ИИ-инструменты', callback_data = 'ai_tools')
-        markup.row(btn1, btn2, btn3)
+        # btn3 = types.InlineKeyboardButton ('ИИ-инструменты', callback_data = 'ai_tools')
+        markup.row(btn1, btn2)
         # btn4 = types.InlineKeyboardButton('Поговорить с GPT', callback_data='start_gpt')
         # markup.row(btn3, btn4)
         
