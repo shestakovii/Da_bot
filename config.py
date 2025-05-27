@@ -1,6 +1,5 @@
 import os
 import telebot
-import openai
 from configs import config as app_config
 
 BOT_TOKEN = app_config.BOT_TOKEN
