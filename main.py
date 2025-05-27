@@ -12,7 +12,7 @@ from handlers.start_handler import setup_start_handler
 from handlers.weather_handler import setup_weather_handler
 from handlers.afisha_handler import setup_afisha_handler
 from handlers.ai_tools_handler import setup_ai_tools_handler
-from handlers.image_gen_handler import setup_image_gen_handler
+# from handlers.image_gen_handler import setup_image_gen_handler
 from handlers.parser_handler import setup_parser_handler
 from handlers.preference_handler import setup_preference_handler
 from handlers.set_city_handler import setup_set_city_handler
@@ -96,7 +96,7 @@ def setup_handlers():
     setup_start_handler(bot)
     setup_weather_handler(bot)
     setup_ai_tools_handler(bot)
-    setup_image_gen_handler(bot)
+    # setup_image_gen_handler(bot)
     setup_parser_handler(bot)
     setup_set_city_handler(bot)
     setup_afisha_handler(bot)
