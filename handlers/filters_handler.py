@@ -357,15 +357,19 @@ def setup_filter_apply_filters_handler(bot):
                 except Exception as e:
                     logger.warning(f"Некорректное время в событии {event.get('Id')}: {e}")
 
-
-            # time_threshold = datetime.now() - timedelta(hours=2)
-
-            # # Фильтрация событий
-            # filtered_events = [
-            #     event for event in filtered_events
-            #     if event.get('event_date') and event.get('event_time')
-            #     and datetime.strptime(f"{event['event_date']} {event['event_time']}", "%Y-%m-%d %H:%M") >= time_threshold
-            # ]
+            # Фильтрация событий по времени
+            # Получаем текущее время (время запроса пользователя)
+            current_time = datetime.now()
+            
+            # Вычисляем пороговое время (X часов назад от текущего времени)
+            time_threshold = current_time - timedelta(hours=2)
+            
+            # Фильтрация событий по времени, соответсвующим условиям
+            filtered_events = [
+                event for event in filtered_events
+                if event.get('event_date') and event.get('event_time')
+                and datetime.strptime(f"{event['event_date']} {event['event_time']}", "%Y-%m-%d %H:%M") >= time_threshold
+            ]
             
             logger.info(f'Финальный список {len(filtered_events)} событий после всех фильтров')
             
