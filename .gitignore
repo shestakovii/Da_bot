@@ -3,6 +3,7 @@ venv/
 .env/
 .env.local
 .env.dev
+.env.prod
 .env.prodgit add .
 .venv/
 
