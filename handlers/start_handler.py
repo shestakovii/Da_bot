@@ -1,5 +1,6 @@
 import telebot
 from telebot import types
+import os
 from datetime import datetime
 from db.operations.db_users import db_update_users
 from handlers.errors_handler import handle_network_errors
@@ -31,7 +32,10 @@ def setup_start_handler(bot):
         # btn4 = types.InlineKeyboardButton('Поговорить с GPT', callback_data='start_gpt')
         # markup.row(btn3, btn4)
         
-        file=open(r'C:\Disk D\Dev\projects\Boryusik_bot\cj.jpg', 'rb')
+        PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        file_path = os.path.join(PROJECT_ROOT, 'cj.jpg')
+        file = open(file_path, 'rb')
+        
         bot.send_photo(message.chat.id, file)
         bot.send_message(message.chat.id, f'Привет {message.from_user.first_name} {message.from_user.last_name}! Меня зовут <b>Борюсик</b> - я твой лучший бро! Чем могу быть полезен?', reply_markup=markup, parse_mode='html')
 

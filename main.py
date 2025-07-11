@@ -2,9 +2,12 @@ import telebot
 import os
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import threading
+import traceback
 from telebot import types
 from config import BOT_TOKEN
+from config import ADMIN_CHAT_ID
 from telebot import apihelper
 from telebot.apihelper import ApiTelegramException
 from urllib3.exceptions import ProtocolError, ReadTimeoutError
@@ -20,6 +23,38 @@ from handlers.set_city_handler import setup_apply_city_selection_handler
 from handlers.filters_handler import setup_filter_handler, setup_filter_category_selection_handler, setup_filter_tag_selection_handler, setup_filter_next_to_price_handler, setup_filter_price_selection_handler, setup_filter_apply_filters_handler, setup_filter_all_tags_selection_handler
 from handlers.show_events_handler import show_next_events_handler
 from handlers.errors_handler import handle_network_errors
+
+# # Настройка логирования
+# logging.basicConfig(
+#     level=getattr(logging, config.LOG_LEVEL),
+#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+#     handlers=[
+#         logging.FileHandler("bot_debug.log"),  # Логи в файл
+#         logging.StreamHandler()               # Логи в консоль
+#     ]
+# )
+
+# === Настройка логирования ===
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Отключаем "всплытие" логов, чтобы избежать дублирования
+logger.propagate = False
+
+# === Логирование в файл с ротацией ===
+log_file = os.path.join(os.path.dirname(__file__), 'bot.log')
+
+# Проверяем, нет ли уже добавленных обработчиков
+if not logger.handlers:
+    handler = RotatingFileHandler(log_file, maxBytes=5 * 1024 * 1024, backupCount=2)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    # === Консольное логирование (опционально) ===
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 
 # Настройки соединения
@@ -63,20 +98,40 @@ def safe_make_request(*args, **kwargs):
 # Патчим метод
 apihelper._make_request = safe_make_request
 
-# # Настройка логирования
-# logging.basicConfig(
-#     level=getattr(logging, config.LOG_LEVEL),
-#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-#     handlers=[
-#         logging.FileHandler("bot_debug.log"),  # Логи в файл
-#         logging.StreamHandler()               # Логи в консоль
-#     ]
-# )
+# # Включаем режим отладки
+# apihelper.DEBUG = True
 
-logger = logging.getLogger(__name__)
 
-# Включаем режим отладки
-apihelper.DEBUG = True
+# === Глобальная обработка необработанных исключений ===
+def handle_uncaught_exception(bot, update, exception):
+    logger.error(f"Необработанное исключение: {exception}", exc_info=True)
+    logger.error(traceback.format_exc())
+
+    if update and hasattr(update, "message") and update.message:
+        try:
+            bot.reply_to(update.message, "Произошла внутренняя ошибка. Попробуйте ещё раз.")
+        except Exception as reply_error:
+            logger.error(f"Ошибка при ответе пользователю: {reply_error}")
+
+def wrap_with_error_handler(func, handler):
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            handler(*args, exception=e)
+    return wrapped
+
+# === Лимит на количество перезапусков ===
+MAX_RESTARTS = 15
+RESTART_WINDOW = 60 * 5  # 5 минут
+restarts = []
+
+def should_restart():
+    now = time.time()
+    global restarts
+    restarts = [t for t in restarts if t > now - RESTART_WINDOW]
+    restarts.append(now)
+    return len(restarts) < MAX_RESTARTS
 
 # Локальное хранилище для chat_id текущего пользователя
 thread_local = threading.local()
@@ -112,6 +167,18 @@ def setup_handlers():
     setup_preference_handler(bot)
 
 
+def send_admin_alert(message):
+    """Шлёт алерт админу в Telegram"""
+    if not ADMIN_CHAT_ID:
+        logger.warning("ADMIN_CHAT_ID не задан — не могу отправить алерт")
+        return
+    
+    try:
+        bot.send_message(ADMIN_CHAT_ID, message)
+        logger.info(f"Алерт администратору отправлен: {message}")
+    except Exception as e:
+        logger.error(f"Не удалось отправить алерт админу: {e}")
+
 
 def run_bot():
     while True:
@@ -124,14 +191,20 @@ def run_bot():
             logger.critical(f"CRASH: {str(e)}", exc_info=True)
             logger.info("Restarting in 5 seconds...")
 
-            if hasattr(thread_local, "chat_id"):
+            chat_id = getattr(thread_local, "chat_id", None)
+            if chat_id:
                 try:
-                    bot.send_message(thread_local.chat_id, "Дружище, подожди, не торопись, дай мне 5 секунд подумать")
+                    bot.send_message(chat_id, "Дружище, подожди, не торопись, дай мне 5 секунд подумать")
                 except Exception as send_error:
                     logger.error(f"Ошибка при отправке сообщения пользователю: {send_error}")
 
             time.sleep(5)
-            continue
+
+        if not should_restart():
+            error_message = "❌ Бот остановлен: превышено количество перезапусков за последние 5 минут"
+            logger.critical(error_message)
+            send_admin_alert(error_message)
+            break
 
 if __name__ == "__main__":
     # Настройка соединения

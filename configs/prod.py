@@ -15,3 +15,4 @@ class ProdConfig(BaseConfig):
         self.OPENAI_TOKEN = os.getenv("OPENAI_TOKEN")
         self.API_Weather = os.getenv("API_Weather")
         self.HF_TOKEN = os.getenv("HF_TOKEN")
+        self.ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")

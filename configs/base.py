@@ -19,6 +19,7 @@ class BaseConfig:
     OPENAI_TOKEN: str = ""
     HF_TOKEN: str = ""
     API_Weather: str = ""
+    ADMIN_CHAT_ID: str = ""
 
     @property
     def DB_PATH(self):
